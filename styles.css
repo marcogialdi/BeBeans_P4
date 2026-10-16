@@ -209,6 +209,45 @@ html { scroll-padding-top: 112px; }
 .legend .val { font-size: 22px; font-weight: 300; }
 .sw-4 { outline: 1px solid #5A5F66; }
 
+/* ─── Viaggi ─── */
+.trips { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 16px; }
+.trip {
+  text-align: left; cursor: pointer;
+  display: flex; flex-direction: column; gap: 14px;
+  padding: 22px; border-radius: 18px;
+  background: var(--surface-2); border: 1px solid transparent;
+  transition: border-color .2s, background .2s;
+}
+.trip:hover { border-color: #34383E; }
+.trip[aria-pressed="true"] { border-color: var(--accent); background: #1E1D1A; }
+.trip[aria-pressed="true"] .eyebrow { color: var(--accent-text); }
+.trip-km { font-size: 34px; font-weight: 300; letter-spacing: -0.01em; line-height: 1; }
+.trip-km small { font-size: 0.47em; }
+.trip dl { margin: 0; display: flex; flex-direction: column; gap: 8px; font-size: 14px; }
+.trip dl div { display: flex; justify-content: space-between; gap: 12px; }
+.trip dt { color: var(--muted); }
+.trip dd { margin: 0; }
+
+/* ─── Dettagli espandibili ─── */
+.more { border-top: 1px solid var(--line); }
+.more summary {
+  list-style: none; cursor: pointer; min-height: 44px;
+  display: flex; align-items: center; justify-content: space-between; gap: 12px;
+  padding-top: 14px; font-size: 14px; color: var(--text-2);
+}
+.more summary::-webkit-details-marker { display: none; }
+.more summary::after {
+  content: ""; width: 8px; height: 8px; flex: none; margin-right: 4px;
+  border-right: 1.5px solid currentColor; border-bottom: 1.5px solid currentColor;
+  transform: rotate(45deg) translateY(-3px); transition: transform .2s;
+}
+.more[open] summary::after { transform: rotate(-135deg) translateX(-3px); }
+.more summary:hover { color: var(--text); }
+.more summary:focus-visible { outline: 2px solid var(--accent); outline-offset: 4px; border-radius: 6px; }
+/* Altezza limitata: aprendo il dettaglio la scheda accanto non si allunga a dismisura. */
+.more .rows { margin-top: 8px; max-height: 280px; overflow-y: auto; padding-right: 6px; scrollbar-width: thin; scrollbar-color: #3A3E44 transparent; }
+.more .rows > div { padding: 10px 0; font-size: 13px; }
+
 /* ─── Pneumatici ─── */
 .tyres { display: grid; grid-template-columns: 1fr 96px 1fr; align-items: center; gap: 12px; }
 .tyre-col { display: flex; flex-direction: column; gap: 28px; }
@@ -239,8 +278,23 @@ html { scroll-padding-top: 112px; }
 .map .leaflet-control-attribution { background: rgba(11,12,14,.7); color: var(--muted); font-size: 10px; }
 .map .leaflet-control-attribution a { color: var(--text-2); }
 .map .leaflet-bar a { background: var(--surface); color: var(--text); border-color: var(--line); }
-.car-pin { width: 56px; height: 56px; border-radius: 50%; background: var(--accent-soft); display: grid; place-items: center; }
+.car-pin { position: relative; width: 56px; height: 56px; border-radius: 50%; background: var(--accent-soft); display: grid; place-items: center; }
 .car-pin::after { content: ""; width: 16px; height: 16px; border-radius: 50%; background: var(--accent); box-shadow: 0 0 0 4px #101214; }
+/* Freccia della direzione di marcia: ruota attorno al centro del segnaposto. */
+.car-pin .heading { position: absolute; inset: 0; }
+.car-pin .heading::before {
+  content: ""; position: absolute; left: 50%; top: 3px; transform: translateX(-50%);
+  border-left: 7px solid transparent; border-right: 7px solid transparent; border-bottom: 11px solid var(--accent);
+}
+.charge-pin {
+  width: 22px; height: 22px; border-radius: 7px; display: grid; place-items: center;
+  background: var(--surface); border: 1px solid #4A4E55; color: var(--seg-2);
+}
+.map .leaflet-tooltip {
+  background: var(--surface); color: var(--text); border: 1px solid var(--line);
+  font-family: var(--font); font-size: 12px; box-shadow: none;
+}
+.map .leaflet-tooltip-top::before { border-top-color: var(--line); }
 .inline-rows { margin: 0; display: flex; flex-wrap: wrap; gap: 8px 24px; font-size: 14px; }
 .inline-rows div { display: flex; gap: 6px; }
 .inline-rows dt { color: var(--muted); }
@@ -275,6 +329,9 @@ html { scroll-padding-top: 112px; }
   #btn-logout { grid-column: 3; grid-row: 1; }
   .freshness { grid-column: 1 / -1; grid-row: 2; margin: 0; }
   .legend { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .trips { grid-template-columns: 1fr; gap: 10px; }
+  .trip { padding: 18px; gap: 10px; }
+  .trip-km { font-size: 28px; }
   .legend .val { font-size: 18px; }
   .row, .kpis { gap: 12px; }
   .kpis { grid-template-columns: repeat(2, minmax(0, 1fr)); }

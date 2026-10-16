@@ -12,6 +12,7 @@ let lastFetch = 0;
 let energyPeriod = "SinceCharge";
 let map = null;
 let marker = null;
+let chargeLayer = null;
 
 const $ = (id) => document.getElementById(id);
 
@@ -24,7 +25,11 @@ async function init() {
 
   if (DEMO) {
     showDashboard();
-    showBanner("Modalità dimostrativa: valori di esempio, nessuna chiamata reale.");
+    showBanner(
+      params.has("demo")
+        ? "Modalità dimostrativa: valori di esempio, nessuna chiamata reale."
+        : "Modalità dimostrativa: config.js contiene ancora i segnaposto. Inserisci SUPABASE_URL e SUPABASE_ANON_KEY per vedere i dati reali.",
+    );
     await refresh();
     return;
   }
@@ -57,13 +62,7 @@ function wireUi() {
   });
 
   document.querySelectorAll(".segmented button").forEach((b) =>
-    b.addEventListener("click", () => {
-      energyPeriod = b.dataset.period;
-      document.querySelectorAll(".segmented button").forEach((x) =>
-        x.setAttribute("aria-pressed", String(x === b)),
-      );
-      if (snapshot) renderEnergy(snapshot.data.battery);
-    }),
+    b.addEventListener("click", () => setPeriod(b.dataset.period)),
   );
 
   // Aggiorna al ritorno sull'app e periodicamente mentre è visibile.
@@ -94,7 +93,7 @@ function wireUi() {
       ticking = false;
       if (Date.now() < lockUntil) return;
       const offset = window.innerWidth <= 760 ? 48 : 150;
-      const sections = ["panoramica", "salute", "clima", "ricarica", "posizione", "storico"]
+      const sections = ["panoramica", "viaggi", "salute", "clima", "ricarica", "posizione", "storico"]
         .map((id) => $(id))
         .filter((el) => el && !el.hidden && el.offsetParent)
         .map((el) => ({ id: el.id, top: Math.round(el.getBoundingClientRect().top) }))
@@ -278,6 +277,21 @@ function duration(minutes) {
 
 const hhmm = (t) => (t && has(t.hour) ? `${String(t.hour).padStart(2, "0")}:${String(t.minute ?? 0).padStart(2, "0")}` : null);
 
+/** Orario di un istante: "14:20" se è oggi, altrimenti "15/10 14:20". */
+function clock(date) {
+  if (!date || Number.isNaN(date.getTime())) return null;
+  const time = date.toLocaleTimeString("it-IT", { hour: "2-digit", minute: "2-digit" });
+  if (date.toDateString() === new Date().toDateString()) return time;
+  return `${date.toLocaleDateString("it-IT", { day: "2-digit", month: "2-digit" })} ${time}`;
+}
+
+/** Punto cardinale a partire dai gradi rispetto al nord. */
+const POINTS = ["Nord", "Nord-est", "Est", "Sud-est", "Sud", "Sud-ovest", "Ovest", "Nord-ovest"];
+const compass = (deg) => (has(deg) ? POINTS[Math.round((((Number(deg) % 360) + 360) % 360) / 45) % 8] : null);
+
+/** Energia in kWh partendo da un valore in Wh. */
+const kwh = (wh, digits = 1) => (has(wh) ? `${num(Number(wh) / 1000, digits)} kWh` : null);
+
 // Le enum dell'API non sono documentate: le traduciamo per suffisso, la più lunga vince.
 const WORDS = {
   NOT_CHARGING: "Non in carica",
@@ -322,7 +336,19 @@ const WORDS = {
   AC: "AC",
   DC: "DC",
   NO_WARNING: "Nessun avviso",
+  NOT_PROVIDING_POWER: "Nessuna corrente",
+  PROVIDING_POWER: "Eroga corrente",
+  TIMER: "Da timer",
+  MANUAL: "Manuale",
+  REMOTE: "Da remoto",
+  APP: "Da app",
+  HOME: "Casa",
+  WORK: "Lavoro",
+  PUBLIC: "Pubblico",
+  OTHER: "Altro",
 };
+// Parole tecniche che non aggiungono significato nelle etichette di ripiego.
+const GENERIC = new Set(["STATUS", "TYPE", "REASON", "MODE", "STATE", "LEVEL", "INTENSITY", "SETTING"]);
 const WORD_KEYS = Object.keys(WORDS).sort((a, b) => b.length - a.length);
 
 function label(v) {
@@ -330,7 +356,8 @@ function label(v) {
   const s = String(v).toUpperCase();
   if (/UNSPECIFIED|UNKNOWN/.test(s)) return null;
   for (const k of WORD_KEYS) if (s === k || s.endsWith(`_${k}`)) return WORDS[k];
-  const tail = s.split("_").slice(-2).join(" ").toLowerCase();
+  const words = s.split("_").filter((w) => w && !GENERIC.has(w));
+  const tail = (words.length ? words : s.split("_")).slice(-2).join(" ").toLowerCase();
   return tail.charAt(0).toUpperCase() + tail.slice(1);
 }
 
@@ -403,9 +430,10 @@ function render(snap) {
   renderHero(d.battery, d.targetSoc);
   renderStatus(d.exterior, d.availability);
   renderKpis(d);
+  renderTrips(d.odometer, d.battery);
   renderEnergy(d.battery);
   renderHealth(d.health);
-  renderClimate(d.parkingClimatization, d.parkingClimateTimer, d.preCleaning);
+  renderClimate(d.parkingClimatization, d.parkingClimateTimer, d.preCleaning, d.battery);
   renderCharging(d);
   renderLocation(d.location, d.isAtChargeLocation, d.chargeLocations);
 }
@@ -519,6 +547,26 @@ function renderStatus(ext, avail) {
     ["Disponibilità", availability || null],
     ["Motivo", unavailable],
   ]);
+
+  // Dettaglio di ogni apertura, nel pannello espandibile.
+  const PARTS = [
+    ["frontLeftDoor", "Porta anteriore sinistra"],
+    ["frontRightDoor", "Porta anteriore destra"],
+    ["rearLeftDoor", "Porta posteriore sinistra"],
+    ["rearRightDoor", "Porta posteriore destra"],
+    ["frontLeftWindow", "Finestrino anteriore sinistro"],
+    ["frontRightWindow", "Finestrino anteriore destro"],
+    ["rearLeftWindow", "Finestrino posteriore sinistro"],
+    ["rearRightWindow", "Finestrino posteriore destro"],
+    ["hood", "Cofano"],
+    ["tailgate", "Portellone"],
+    ["tailgateLock", "Serratura portellone"],
+    ["tankLid", "Sportello di ricarica"],
+    ["sunroof", "Tetto"],
+    ["alarm", "Allarme"],
+  ];
+  const detail = PARTS.map(([k, name]) => [name, label(ext?.[k]), isOpen(ext?.[k]) || /UNLOCKED|TRIGGERED/i.test(String(ext?.[k] ?? "")) ? "warn" : null]);
+  $("ext-details").hidden = !setRows("ext-rows", detail);
 }
 
 function renderKpis(d) {
@@ -552,6 +600,70 @@ const SEGMENTS = [
   ["battery", "Batteria", "var(--seg-3)"],
   ["other", "Altro", "var(--seg-4)"],
 ];
+
+// ─── Viaggi ───
+// I tre contachilometri parziali e i relativi consumi usano gli stessi tre periodi dell'API.
+const TRIPS = [
+  { period: "SinceCharge", title: "Dall'ultima carica", km: "tripMeterSinceChargeKm", speed: "averageSpeedKmPerHourSinceCharge",
+    cons: "averageEnergyConsumptionKwhPer100KmSinceCharge", total: "totalEnergyConsumptionWhSinceCharge" },
+  { period: "Automatic", title: "Ultimo viaggio", km: "tripMeterAutomaticKm", speed: "averageSpeedKmPerHourAutomatic",
+    cons: "averageEnergyConsumptionKwhPer100KmAutomatic", total: "totalEnergyConsumptionWhAutomatic" },
+  { period: "Manual", title: "Parziale manuale", km: "tripMeterManualKm", speed: "averageSpeedKmPerHour",
+    cons: "averageEnergyConsumptionKwhPer100Km", total: "totalEnergyConsumptionWh" },
+];
+
+function setPeriod(period) {
+  energyPeriod = period;
+  document.querySelectorAll(".segmented button, .trip").forEach((x) =>
+    x.setAttribute("aria-pressed", String(x.dataset.period === period)),
+  );
+  if (snapshot) renderEnergy(snapshot.data.battery);
+}
+
+function renderTrips(o, b) {
+  const box = $("trips");
+  box.replaceChildren();
+  for (const t of TRIPS) {
+    const km = o?.[t.km];
+    const rows = [
+      ["Velocità media", has(o?.[t.speed]) ? `${num(o[t.speed])} km/h` : null],
+      ["Consumo medio", has(b?.[t.cons]) ? `${num(b[t.cons], 1)} kWh/100 km` : null],
+      ["Energia totale", kwh(b?.[t.total])],
+    ].filter(([, v]) => has(v));
+    if (!has(km) && !rows.length) continue;
+
+    const btn = document.createElement("button");
+    btn.type = "button";
+    btn.className = "trip";
+    btn.dataset.period = t.period;
+    btn.setAttribute("aria-pressed", String(t.period === energyPeriod));
+    btn.addEventListener("click", () => setPeriod(t.period));
+
+    const title = document.createElement("span");
+    title.className = "eyebrow";
+    title.textContent = t.title;
+    const big = document.createElement("span");
+    big.className = "trip-km";
+    big.append(has(km) ? num(km, km < 100 ? 1 : 0) : "—");
+    const unit = document.createElement("small");
+    unit.textContent = " km";
+    big.append(unit);
+
+    const dl = document.createElement("dl");
+    for (const [k, v] of rows) {
+      const row = document.createElement("div");
+      const dt = document.createElement("dt");
+      const dd = document.createElement("dd");
+      dt.textContent = k;
+      dd.textContent = v;
+      row.append(dt, dd);
+      dl.append(row);
+    }
+    btn.append(title, big, dl);
+    box.append(btn);
+  }
+  $("viaggi").hidden = !box.children.length;
+}
 
 function renderEnergy(b) {
   const pct = b?.[`energyConsumptionPercentage${energyPeriod}`];
@@ -629,33 +741,122 @@ function renderHealth(h) {
   };
   if (warnings.length) warnings.forEach((w) => li(w, true));
   else li("Nessun avviso: liquidi, luci e batteria 12 V regolari", false);
+
+  // Pannello espandibile: ogni controllo, compresi quelli regolari.
+  const status = (v) => (has(v) ? (isOk(v) ? ["Regolare", null] : [label(v) ?? "Da verificare", "warn"]) : [null, null]);
+  const checks = [
+    ["Liquido freni", h.brakeFluidLevelWarning],
+    ["Liquido di raffreddamento", h.engineCoolantLevelWarning],
+    ["Olio", h.oilLevelWarning],
+    ["Liquido lavavetri", h.washerFluidLevelWarning],
+    ["Batteria 12 V", h.lowVoltageBatteryWarning],
+  ].map(([name, v]) => [name, ...status(v)]);
+
+  const lightRows = Object.entries(h.lightWarnings ?? {})
+    .map(([k, v]) => [lightName(k), ...status(v)])
+    .filter(([, v]) => has(v))
+    .sort((a, b) => (a[2] === "warn" ? -1 : 0) - (b[2] === "warn" ? -1 : 0) || a[0].localeCompare(b[0], "it"));
+
+  const count = setRows("check-rows", [...checks, ...lightRows]);
+  $("check-details").hidden = !count;
+  setText("check-summary", lightRows.length ? `Dettaglio liquidi e luci (${lightRows.length} luci)` : "Dettaglio controlli");
 }
 
-function renderClimate(c, timers, pre) {
+// Nomi delle luci: tipo + posizione, ricavati dal nome del campo (es. brakeLightLeft).
+// [prefisso del campo, nome, genere]; "fogLightRear" va prima di "fogLight" perché più specifico.
+const LIGHT_TYPES = [
+  ["turnIndicator", "Indicatore di direzione", "m"],
+  ["lowBeam", "Anabbagliante", "m"],
+  ["highBeam", "Abbagliante", "m"],
+  ["fogLightRear", "Retronebbia", "m"],
+  ["fogLight", "Fendinebbia", "m"],
+  ["brakeLight", "Luce stop", "f"],
+  ["positionLight", "Luce di posizione", "f"],
+  ["daytimeRunningLight", "Luce diurna", "f"],
+  ["registrationPlateLight", "Luce targa", "f"],
+  ["sideMarkerLight", "Luce d'ingombro", "f"],
+  ["reverseLight", "Luce di retromarcia", "f"],
+  ["corneringLight", "Luce di svolta", "f"],
+];
+const LIGHT_PLACES = {
+  FrontLeft: ["anteriore sinistro", "anteriore sinistra"], FrontRight: ["anteriore destro", "anteriore destra"],
+  RearLeft: ["posteriore sinistro", "posteriore sinistra"], RearRight: ["posteriore destro", "posteriore destra"],
+  SideLeft: ["laterale sinistro", "laterale sinistra"], SideRight: ["laterale destro", "laterale destra"],
+  Left: ["sinistro", "sinistra"], Right: ["destro", "destra"],
+  Front: ["anteriore", "anteriore"], Rear: ["posteriore", "posteriore"], Center: ["centrale", "centrale"],
+  Any: ["(complessivo)", "(complessivo)"], "": ["", ""],
+};
+function lightName(key) {
+  const type = LIGHT_TYPES.find(([p]) => key.startsWith(p));
+  if (!type) return key;
+  const suffix = key.slice(type[0].length);
+  const place = LIGHT_PLACES[suffix]?.[type[2] === "m" ? 0 : 1] ?? suffix;
+  return `${type[1]} ${place}`.trim();
+}
+
+const isRunning = (v) => /(^|_)(RUNNING|STARTED|ACTIVE|ON)$/i.test(String(v ?? "")) && !/NOT_RUNNING|INACTIVE/i.test(String(v));
+const heating = (v) => {
+  const l = label(v);
+  return l && l !== "Spento" ? `Riscaldamento ${l.toLowerCase()}` : l;
+};
+
+function renderClimate(c, timers, pre, battery) {
   setText("clim-temp", num(c?.requestedCompartmentTemperatureCelsius ?? timers?.timerSettings?.requestedCompartmentTemperatureCelsius, 1));
-  const running = label(c?.runningStatus ?? c?.mainClimateRunningStatus);
+  const status = c?.runningStatus ?? c?.mainClimateRunningStatus;
+  const running = label(status);
   const end = tsDate(c?.endingAt);
-  setText("clim-state", running ? `richiesti · ${running.toLowerCase()}${end && end > new Date() ? ` fino alle ${end.toLocaleTimeString("it-IT", { hour: "2-digit", minute: "2-digit" })}` : ""}` : "richiesti", "");
+  setText("clim-state", running ? `richiesti · ${running.toLowerCase()}${end && end > new Date() ? ` fino alle ${clock(end)}` : ""}` : "richiesti", "");
 
   const rows = [];
+  if (isRunning(status)) {
+    rows.push(["Avviato", [clock(tsDate(c?.startedAt)), label(c?.startReason)?.toLowerCase()].filter(Boolean).join(" · ") || null]);
+  } else if (has(c?.startReason)) {
+    rows.push(["Ultimo avvio", label(c.startReason)]);
+  }
+
+  // Pre-condizionamento manuale (dal dominio batteria).
+  const mp = battery?.manualPreconditioning;
+  if (mp) {
+    const mpEnd = tsDate(mp.endingAt);
+    const mpStart = tsDate(mp.startedAt);
+    const active = isRunning(mp.preconditioningStatus);
+    rows.push(["Pre-condizionamento manuale", [label(mp.preconditioningStatus),
+      active && mpEnd ? `fino alle ${clock(mpEnd)}` : null,
+      !active && mpStart ? `ultimo ${ago(mpStart)}` : null].filter(Boolean).join(" · ") || null]);
+    if (has(mp.unavailableReason)) rows.push(["Non disponibile perché", label(mp.unavailableReason), "warn"]);
+  }
+
   for (const t of timers?.parkingClimateTimers ?? []) {
     const when = hhmm(t.readyAt);
     if (!when) continue;
-    rows.push([`Pronta alle ${when}`, `${t.repeat ? days(t.weekdays) ?? "Ripetuto" : "Una volta"}${t.activated ? "" : " · disattivato"}`]);
+    const sd = t.startDate;
+    const onDate = has(sd?.day) ? `il ${String(sd.day).padStart(2, "0")}/${String(sd.month).padStart(2, "0")}` : "una volta";
+    rows.push([`Pronta alle ${when}`, `${t.repeat ? days(t.weekdays) ?? "Ripetuto" : onDate}${t.activated ? "" : " · disattivato"}`]);
   }
   if ((timers?.pendingParkingClimateTimers ?? []).length) rows.push(["Modifiche timer", badge("In attesa di conferma")]);
+  if ((timers?.pendingDeleteParkingClimateTimers ?? []).length) rows.push(["Timer da eliminare", badge("In attesa di conferma")]);
+  if (timers?.pendingTimerSettings) rows.push(["Impostazioni timer", badge("Modifica non confermata")]);
 
   const s = timers?.timerSettings;
   const seats = s?.seatHeatingIntensity;
-  const seat = label(seats?.frontRowLeftSeat ?? c?.requestedFrontLeftSeat);
-  rows.push(["Sedili anteriori", seat && seat !== "Spento" ? `Riscaldamento ${seat.toLowerCase()}` : seat]);
-  rows.push(["Volante", label(s?.steeringWheelHeatingIntensity ?? c?.requestedSteeringWheelHeating)]);
+  rows.push(["Sedili anteriori", heating(seats?.frontRowLeftSeat ?? c?.requestedFrontLeftSeat)]);
+  rows.push(["Sedili posteriori", heating(seats?.rearRowLeftSeat ?? c?.requestedRearLeftSeat)]);
+  rows.push(["Volante", heating(s?.steeringWheelHeatingIntensity ?? c?.requestedSteeringWheelHeating)]);
   rows.push(["Pre-condizionamento batteria", label(s?.batteryPreconditioning)]);
   rows.push(["Ventilazione", label(c?.ventilation)]);
+
   if (pre) {
     const last = tsDate(pre.lastCycleCompleted);
-    rows.push(["Purificazione aria", [label(pre.runningStatus), last ? `ultima ${ago(last)}` : null].filter(Boolean).join(" · ") || null]);
+    const preRunning = isRunning(pre.runningStatus);
+    rows.push(["Purificazione aria", [label(pre.runningStatus),
+      preRunning && has(pre.runtimeLeftMinutes) ? `ancora ${duration(pre.runtimeLeftMinutes)}` : null,
+      !preRunning && last ? `ultima ${ago(last)}` : null].filter(Boolean).join(" · ") || null]);
+    if (pre.lastCycleValid === false) rows.push(["Ultimo ciclo", "Non completato correttamente", "warn"]);
+    const measured = tsDate(pre.measurementDate);
+    if (measured) rows.push(["Misurazione aria", ago(measured)]);
+    if (has(pre.error) && !isOk(pre.error)) rows.push(["Errore purificazione", label(pre.error), "warn"]);
   }
+  for (const w of c?.warnings ?? []) rows.push(["Avviso clima", label(w), "warn"]);
   for (const e of c?.errors ?? []) rows.push(["Errore clima", label(e), "warn"]);
   setRows("clim-rows", rows);
 }
@@ -679,6 +880,8 @@ function renderCharging(d) {
 
   const g = d.globalChargeTimer?.globalChargeTimer;
   if (g && hhmm(g.start)) rows.push(["Timer di ricarica", `${hhmm(g.start)} – ${hhmm(g.stop)}${g.activated ? "" : " · disattivato"}`]);
+  const pg = d.globalChargeTimer?.pendingGlobalChargeTimer;
+  if (pg && hhmm(pg.start)) rows.push(["Modifica in attesa", badge(`Timer ${hhmm(pg.start)} – ${hhmm(pg.stop)} · non confermato`)]);
 
   const amp = d.ampLimit?.ampLimit?.ampLimit;
   if (has(amp)) rows.push(["Limite corrente", `${num(amp)} A`]);
@@ -688,19 +891,31 @@ function renderCharging(d) {
   for (const loc of d.chargeLocations?.chargeLocations ?? []) {
     const name = loc.locationAlias || "Luogo di ricarica";
     const timer = (loc.chargeTimers ?? []).find((x) => x.activated);
+    const departure = (loc.departureTimes ?? []).find((x) => x.activated);
+    const type = label(loc.locationType);
     const bits = [
+      type !== name ? type : null,
       has(loc.minimumSoc) ? `min ${num(loc.minimumSoc)}%` : null,
       has(loc.ampLimit) ? `${num(loc.ampLimit)} A` : null,
       timer ? `${hhmm(timer.start)} – ${hhmm(timer.stop)}` : null,
+      departure ? `partenza ${hhmm(departure.departureTime)}${days(departure.activeDays) ? ` (${days(departure.activeDays)})` : ""}` : null,
       loc.isOptimizedChargingEnabled ? "ottimizzata" : null,
+      loc.isBidirectionalChargingEnabled ? "bidirezionale" : null,
     ].filter(Boolean);
     rows.push([name, bits.join(" · ") || "Configurato"]);
   }
+  if ((d.chargeLocations?.pendingChargeLocations ?? []).length) rows.push(["Luoghi di ricarica", badge("Modifiche non confermate")]);
+  if ((d.chargeLocations?.pendingDeleteChargeLocations ?? []).length) rows.push(["Luoghi da eliminare", badge("In attesa di conferma")]);
 
   const b = d.battery;
   if (b) {
+    rows.push(["Alimentazione caricatore", label(b.chargerPowerStatus)]);
     if (b.estimatedChargingTimeMinutesToMinimumSoc > 0) rows.push(["Al minimo di carica", duration(b.estimatedChargingTimeMinutesToMinimumSoc)]);
+    if (b.estimatedChargingTimeMinutesToTargetDistance > 0) rows.push(["All'autonomia desiderata", duration(b.estimatedChargingTimeMinutesToTargetDistance)]);
     if (has(b.chargingCurrentAmps) && b.chargingCurrentAmps > 0) rows.push(["Corrente / tensione", `${num(b.chargingCurrentAmps)} A · ${num(b.chargingVoltageVolts)} V`]);
+    // L'unità del limite di potenza non è documentata: valori grandi sono W, piccoli kW.
+    const pl = b.dischargeInfo?.powerLimit;
+    if (has(pl) && pl > 0) rows.push(["Limite di potenza", `${num(pl > 1000 ? pl / 1000 : pl, 1)} kW`]);
   }
   setRows("chg-rows", rows);
 }
@@ -713,31 +928,57 @@ async function renderLocation(loc, atLoc, locs) {
   }
   setText("loc-age", ago(observedAt(loc)) ?? "", "");
 
+  const saved = locs?.chargeLocations ?? [];
+  const here = atLoc?.locationId ? saved.find((l) => l.locationId === atLoc.locationId) : null;
+  const arrived = tsDate(atLoc?.arrivedAtTimestamp) ?? (atLoc?.arrivedAt ? new Date(atLoc.arrivedAt) : null);
   const place = atLoc?.locationId
-    ? (locs?.chargeLocations ?? []).find((l) => l.locationId === atLoc.locationId)?.locationAlias ?? "Punto di ricarica"
+    ? `${here?.locationAlias ?? "Punto di ricarica"}${clock(arrived) ? ` · dalle ${clock(arrived)}` : ""}`
     : null;
+  const heading = Number(loc.heading);
+  const moving = Number(loc.speed) > 0;
   setRows("loc-rows", [
     ["Presso:", place],
     ["Velocità:", has(loc.speed) ? `${num(loc.speed)} km/h` : null],
+    ["Direzione:", has(loc.heading) ? `${compass(heading)} (${num(heading)}°)` : null],
     ["Altitudine:", has(loc.altitude) ? `${num(loc.altitude)} m` : null],
   ]);
 
   try {
     const L = await loadLeaflet();
     const pos = [Number(c.latitude), Number(c.longitude)];
+    // Solo numeri nell'HTML del segnaposto: nessun testo proveniente dall'API.
+    const arrow = has(loc.heading) && Number.isFinite(heading)
+      ? `<span class="heading" style="transform:rotate(${heading.toFixed(0)}deg)${moving ? "" : ";opacity:.55"}"></span>` : "";
+    const icon = L.divIcon({ className: "", html: `<div class="car-pin">${arrow}</div>`, iconSize: [56, 56], iconAnchor: [28, 28] });
     if (!map) {
       map = L.map("map", { zoomControl: true, attributionControl: true, scrollWheelZoom: false }).setView(pos, 15);
       L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
         maxZoom: 19,
         attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>',
       }).addTo(map);
-      marker = L.marker(pos, {
-        icon: L.divIcon({ className: "", html: '<div class="car-pin"></div>', iconSize: [56, 56], iconAnchor: [28, 28] }),
-        keyboard: false,
-      }).addTo(map);
+      chargeLayer = L.layerGroup().addTo(map);
+      marker = L.marker(pos, { icon, keyboard: false, zIndexOffset: 1000 }).addTo(map);
     } else {
       marker.setLatLng(pos);
+      marker.setIcon(icon);
       map.setView(pos, map.getZoom());
+    }
+
+    // Luoghi di ricarica salvati (solo i modelli che li forniscono).
+    chargeLayer.clearLayers();
+    for (const l of saved) {
+      const lat = Number(l.coordinate?.latitude);
+      const lon = Number(l.coordinate?.longitude);
+      if (!Number.isFinite(lat) || !Number.isFinite(lon)) continue;
+      const pin = L.divIcon({
+        className: "",
+        html: '<div class="charge-pin"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M13 2 L5 14 h6 l-1 8 l8-12 h-6 z"/></svg></div>',
+        iconSize: [22, 22],
+        iconAnchor: [11, 11],
+      });
+      const tip = document.createElement("span");
+      tip.textContent = l.locationAlias || "Luogo di ricarica"; // testo, mai HTML
+      L.marker([lat, lon], { icon: pin, keyboard: false }).bindTooltip(tip, { direction: "top", offset: [0, -10] }).addTo(chargeLayer);
     }
     setTimeout(() => map.invalidateSize(), 50);
   } catch {

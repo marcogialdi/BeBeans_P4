@@ -59,6 +59,7 @@
 
       <nav class="tabs" aria-label="Sezioni">
         <a href="#panoramica" class="active">Panoramica</a>
+        <a href="#viaggi">Viaggi</a>
         <a href="#salute">Salute</a>
         <a href="#clima">Clima</a>
         <a href="#ricarica">Ricarica</a>
@@ -123,6 +124,10 @@
           </div>
         </div>
         <dl id="status-rows" class="rows"></dl>
+        <details class="more" id="ext-details">
+          <summary>Dettaglio porte e finestrini</summary>
+          <dl id="ext-rows" class="rows"></dl>
+        </details>
       </article>
     </section>
 
@@ -148,6 +153,15 @@
         <span class="kpi-num"><span id="kpi-cabin">—</span> <small>°C</small></span>
         <span id="kpi-cabin-sub" class="muted small"></span>
       </article>
+    </section>
+
+    <!-- Viaggi -->
+    <section id="viaggi" class="card" data-needs="odometer battery">
+      <div class="card-head">
+        <h2>Viaggi</h2>
+        <span class="muted small">Scegli un periodo per vedere anche dove va l'energia</span>
+      </div>
+      <div id="trips" class="trips" role="group" aria-label="Periodo dei contachilometri parziali"></div>
     </section>
 
     <!-- Energia + pneumatici -->
@@ -191,6 +205,10 @@
           </div>
         </div>
         <ul id="health-alerts" class="alerts"></ul>
+        <details class="more" id="check-details">
+          <summary id="check-summary">Dettaglio controlli</summary>
+          <dl id="check-rows" class="rows"></dl>
+        </details>
       </article>
     </section>
 
