@@ -275,7 +275,8 @@ html { scroll-padding-top: 112px; }
 /* ─── Mappa ─── */
 .map { height: 260px; border-radius: 16px; overflow: hidden; background: #101214; border: 1px solid var(--line-soft); }
 .map.leaflet-container { background: #101214; }
-.map .leaflet-tile-pane { filter: brightness(1.05) contrast(1.05); }
+/* Mappa OpenStreetMap resa scura: inversione dei colori, tonalità riportate, saturazione bassa. */
+.map .leaflet-tile-pane { filter: invert(1) hue-rotate(180deg) brightness(.85) contrast(.9) saturate(.3); }
 .map .leaflet-control-attribution { background: rgba(11,12,14,.7); color: var(--muted); font-size: 10px; }
 .map .leaflet-control-attribution a { color: var(--text-2); }
 .map .leaflet-bar a { background: var(--surface); color: var(--text); border-color: var(--line); }
