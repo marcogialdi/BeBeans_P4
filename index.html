@@ -1,0 +1,263 @@
+<!doctype html>
+<html lang="it">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="robots" content="noindex, nofollow">
+  <meta name="referrer" content="no-referrer">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' https://cdn.jsdelivr.net https://unpkg.com; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com https://unpkg.com; font-src https://fonts.gstatic.com; img-src 'self' data: https://*.tile.openstreetmap.org https://unpkg.com; connect-src 'self' https://*.supabase.co wss://*.supabase.co; manifest-src 'self'; worker-src 'self'; base-uri 'self'; form-action 'self'">
+  <title>La mia auto</title>
+  <meta name="theme-color" content="#0B0C0E">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="La mia auto">
+  <link rel="manifest" href="manifest.webmanifest">
+  <link rel="icon" href="icons/icon.svg" type="image/svg+xml">
+  <link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@200;300;400;500;600&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="styles.css">
+  <script type="module" src="app.js"></script>
+</head>
+<body>
+
+<!-- ───────────── Accesso ───────────── -->
+<main id="view-login" class="login" hidden>
+  <form id="login-form" class="login-card" autocomplete="on">
+    <div class="mark" aria-hidden="true">
+      <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M12 3 L20 12 L12 21 L4 12 Z"/><path d="M12 3 V21"/></svg>
+    </div>
+    <h1>La mia auto</h1>
+    <p class="muted">Accedi per vedere i dati del veicolo.</p>
+    <label>Email
+      <input type="email" name="email" autocomplete="username" required>
+    </label>
+    <label>Password
+      <input type="password" name="password" autocomplete="current-password" required>
+    </label>
+    <button type="submit" class="btn-primary">Accedi</button>
+    <p id="login-error" class="form-error" role="alert" hidden></p>
+  </form>
+</main>
+
+<!-- ───────────── Dashboard ───────────── -->
+<div id="view-dash" hidden>
+  <div class="wrap">
+
+    <header class="topbar">
+      <div class="brand">
+        <div class="mark" aria-hidden="true">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M12 3 L20 12 L12 21 L4 12 Z"/><path d="M12 3 V21"/></svg>
+        </div>
+        <div>
+          <span class="eyebrow">Il mio veicolo</span>
+          <span id="car-name" class="car-name">La mia auto</span>
+        </div>
+      </div>
+
+      <nav class="tabs" aria-label="Sezioni">
+        <a href="#panoramica" class="active">Panoramica</a>
+        <a href="#ricarica">Ricarica</a>
+        <a href="#clima">Clima</a>
+        <a href="#salute">Salute</a>
+        <a href="#posizione">Posizione</a>
+        <a href="#storico">Storico</a>
+      </nav>
+
+      <div class="top-actions">
+        <span class="freshness"><span id="fresh-dot" class="dot"></span><span id="freshness">Caricamento…</span></span>
+        <button id="btn-refresh" class="icon-btn" type="button" aria-label="Aggiorna dati">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><path d="M20 12a8 8 0 1 1-2.3-5.6"/><path d="M20 4v5h-5"/></svg>
+        </button>
+        <button id="btn-logout" class="icon-btn" type="button" aria-label="Esci">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><path d="M15 4h3a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2h-3"/><path d="M10 8l-4 4 4 4"/><path d="M6 12h10"/></svg>
+        </button>
+      </div>
+    </header>
+
+    <p id="banner" class="banner" role="status" hidden></p>
+
+    <!-- Hero -->
+    <section id="panoramica" class="row hero-row">
+      <article class="card hero" data-needs="battery">
+        <div class="ring">
+          <svg viewBox="0 0 220 220" role="img" aria-labelledby="soc-label">
+            <circle cx="110" cy="110" r="96" class="ring-track"/>
+            <circle id="ring-value" cx="110" cy="110" r="96" class="ring-value" transform="rotate(-90 110 110)"/>
+            <line id="ring-target" x1="110" y1="6" x2="110" y2="22" class="ring-target"/>
+          </svg>
+          <div class="ring-center">
+            <span id="soc" class="big-num">—</span>
+            <span id="soc-label" class="eyebrow">Batteria</span>
+          </div>
+        </div>
+        <div class="hero-body">
+          <div class="stack-sm">
+            <span class="eyebrow">Autonomia stimata</span>
+            <span class="huge-num"><span id="range">—</span> <small>km</small></span>
+          </div>
+          <div id="charge-pill" class="pill" hidden>
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true" class="accent"><path d="M13 2 L5 14 h6 l-1 8 l8-12 h-6 z"/></svg>
+            <span id="charge-text"></span>
+          </div>
+          <dl class="trio">
+            <div><dt>Obiettivo</dt><dd id="hero-target">—</dd></div>
+            <div><dt>Potenza</dt><dd id="hero-power">—</dd></div>
+            <div><dt>Energia disp.</dt><dd id="hero-energy">—</dd></div>
+          </dl>
+        </div>
+      </article>
+
+      <article class="card status" data-needs="exterior availability">
+        <span class="eyebrow">Stato</span>
+        <div class="lock">
+          <div class="lock-icon" aria-hidden="true">
+            <svg id="lock-closed" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="5" y="11" width="14" height="10" rx="2"/><path d="M8 11V7a4 4 0 0 1 8 0v4"/></svg>
+            <svg id="lock-open" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" hidden><rect x="5" y="11" width="14" height="10" rx="2"/><path d="M8 11V7a4 4 0 0 1 7.5-2"/></svg>
+          </div>
+          <div class="stack-xs">
+            <span id="lock-title" class="lock-title">—</span>
+            <span id="lock-sub" class="muted small"></span>
+          </div>
+        </div>
+        <dl id="status-rows" class="rows"></dl>
+      </article>
+    </section>
+
+    <!-- KPI -->
+    <section class="kpis" aria-label="Indicatori">
+      <article class="card kpi" data-needs="odometer">
+        <span class="eyebrow">Contachilometri</span>
+        <span class="kpi-num"><span id="kpi-odo">—</span> <small>km</small></span>
+        <span id="kpi-odo-sub" class="muted small"></span>
+      </article>
+      <article class="card kpi" data-needs="battery">
+        <span class="eyebrow">Consumo medio</span>
+        <span class="kpi-num"><span id="kpi-cons">—</span> <small>kWh/100 km</small></span>
+        <span id="kpi-cons-sub" class="muted small"></span>
+      </article>
+      <article class="card kpi" data-needs="health">
+        <span class="eyebrow">Prossimo tagliando</span>
+        <span class="kpi-num"><span id="kpi-service">—</span> <small>giorni</small></span>
+        <span id="kpi-service-sub" class="muted small"></span>
+      </article>
+      <article class="card kpi" data-needs="parkingClimatization preCleaning">
+        <span class="eyebrow">Abitacolo</span>
+        <span class="kpi-num"><span id="kpi-cabin">—</span> <small>°C</small></span>
+        <span id="kpi-cabin-sub" class="muted small"></span>
+      </article>
+    </section>
+
+    <!-- Energia + pneumatici -->
+    <section id="salute" class="row">
+      <article class="card grow" data-needs="battery">
+        <div class="card-head">
+          <h2>Dove va l'energia</h2>
+          <div class="segmented" role="group" aria-label="Periodo">
+            <button type="button" data-period="SinceCharge" aria-pressed="true">Dall'ultima carica</button>
+            <button type="button" data-period="Automatic" aria-pressed="false">Viaggio</button>
+            <button type="button" data-period="Manual" aria-pressed="false">Manuale</button>
+          </div>
+        </div>
+        <div id="energy-bar" class="energy-bar" role="img" aria-label="Ripartizione dei consumi"></div>
+        <div id="energy-legend" class="legend"></div>
+        <p id="energy-empty" class="muted small" hidden>Nessun dato di consumo per questo periodo.</p>
+      </article>
+
+      <article class="card side" data-needs="health">
+        <div class="card-head">
+          <h2>Pneumatici</h2>
+          <span id="tyre-ref" class="muted small"></span>
+        </div>
+        <div class="tyres">
+          <div class="tyre-col right">
+            <div><div class="tyre-val"><span id="tyre-fl">—</span> <small>kPa</small></div><div class="muted xsmall">Ant. sinistro</div></div>
+            <div><div class="tyre-val"><span id="tyre-rl">—</span> <small>kPa</small></div><div class="muted xsmall">Post. sinistro</div></div>
+          </div>
+          <svg width="96" height="170" viewBox="0 0 96 170" role="img" aria-label="Schema vettura vista dall'alto">
+            <rect x="18" y="6" width="60" height="158" rx="26" class="car-body"/>
+            <path d="M26 52 Q48 40 70 52 L66 72 Q48 66 30 72 Z" class="car-glass"/>
+            <path d="M30 118 Q48 112 66 118 L70 138 Q48 148 26 138 Z" class="car-glass"/>
+            <rect id="tw-fl" x="8"  y="34"  width="10" height="26" rx="4" class="tyre ok"/>
+            <rect id="tw-fr" x="78" y="34"  width="10" height="26" rx="4" class="tyre ok"/>
+            <rect id="tw-rl" x="8"  y="112" width="10" height="26" rx="4" class="tyre ok"/>
+            <rect id="tw-rr" x="78" y="112" width="10" height="26" rx="4" class="tyre ok"/>
+          </svg>
+          <div class="tyre-col">
+            <div><div class="tyre-val"><span id="tyre-fr">—</span> <small>kPa</small></div><div class="muted xsmall">Ant. destro</div></div>
+            <div><div class="tyre-val"><span id="tyre-rr">—</span> <small>kPa</small></div><div class="muted xsmall">Post. destro</div></div>
+          </div>
+        </div>
+        <ul id="health-alerts" class="alerts"></ul>
+      </article>
+    </section>
+
+    <!-- Clima + ricarica -->
+    <section class="row two">
+      <article id="clima" class="card" data-needs="parkingClimatization parkingClimateTimer preCleaning">
+        <h2>Clima di parcheggio</h2>
+        <div class="baseline">
+          <span class="mid-num"><span id="clim-temp">—</span> °C</span>
+          <span id="clim-state" class="muted"></span>
+        </div>
+        <dl id="clim-rows" class="rows"></dl>
+      </article>
+
+      <article id="ricarica" class="card" data-needs="targetSoc chargeNow globalChargeTimer ampLimit chargeLocations">
+        <h2>Impostazioni di ricarica</h2>
+        <div class="stack-sm" id="target-block" hidden>
+          <div class="between"><span class="label">Livello obiettivo</span><span id="chg-target">—</span></div>
+          <div class="track"><div id="chg-target-bar" class="track-fill"></div></div>
+        </div>
+        <dl id="chg-rows" class="rows"></dl>
+      </article>
+    </section>
+
+    <!-- Mappa + storico -->
+    <section class="row">
+      <article id="posizione" class="card side" data-needs="location">
+        <div class="card-head">
+          <h2>Posizione</h2>
+          <span id="loc-age" class="muted small"></span>
+        </div>
+        <div id="map" class="map" aria-label="Mappa con la posizione del veicolo"></div>
+        <dl id="loc-rows" class="inline-rows"></dl>
+      </article>
+
+      <article id="storico" class="card grow">
+        <div class="card-head">
+          <h2>Livello batteria · ultimi 7 giorni</h2>
+          <span id="history-meta" class="muted small"></span>
+        </div>
+        <svg id="history" class="history" viewBox="0 0 600 240" preserveAspectRatio="none" role="img" aria-label="Andamento del livello batteria"></svg>
+        <div id="history-axis" class="axis"></div>
+        <p id="history-empty" class="muted small" hidden>Lo storico si riempie automaticamente ogni 15 minuti.</p>
+      </article>
+    </section>
+
+    <footer class="foot">
+      <span>Dati dal Data Portal ufficiale · aggiornamento automatico</span>
+      <span>Identificativo del veicolo protetto lato server</span>
+    </footer>
+  </div>
+
+  <!-- Navigazione mobile -->
+  <nav class="bottom-nav" aria-label="Navigazione principale">
+    <a href="#panoramica" class="active">
+      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="3" width="7" height="7" rx="1.5"/><rect x="3" y="14" width="7" height="7" rx="1.5"/><rect x="14" y="14" width="7" height="7" rx="1.5"/></svg>Home</a>
+    <a href="#ricarica">
+      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><path d="M13 2 L5 14 h6 l-1 8 l8-12 h-6 z"/></svg>Ricarica</a>
+    <a href="#clima">
+      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><path d="M12 3v12"/><circle cx="12" cy="18" r="3"/><path d="M16 6h3M16 10h3"/></svg>Clima</a>
+    <a href="#posizione">
+      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><path d="M12 21s-7-5.5-7-11a7 7 0 0 1 14 0c0 5.5-7 11-7 11z"/><circle cx="12" cy="10" r="2.5"/></svg>Mappa</a>
+    <a href="#storico">
+      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><path d="M4 19h16"/><path d="M6 15l4-5 4 3 5-7"/></svg>Storico</a>
+  </nav>
+</div>
+
+<noscript><p class="banner">Questa dashboard richiede JavaScript.</p></noscript>
+</body>
+</html>
