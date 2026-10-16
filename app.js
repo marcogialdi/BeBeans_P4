@@ -4,7 +4,7 @@ import { SUPABASE_URL, SUPABASE_ANON_KEY, CAR_NAME, REFRESH_MINUTES } from "./co
 
 const params = new URLSearchParams(location.search);
 const DEMO = params.has("demo") || SUPABASE_URL.includes("<");
-const FUNCTION_URL = `${SUPABASE_URL}/functions/v1/polestar`;
+const FUNCTION_URL = `${SUPABASE_URL.trim().replace(/\/+$/, "")}/functions/v1/polestar`;
 
 let supabase = null;
 let snapshot = null;
@@ -74,18 +74,43 @@ function wireUi() {
     if (document.visibilityState === "visible" && !$("view-dash").hidden) refresh();
   }, REFRESH_MINUTES * 60_000);
 
-  // Evidenzia la sezione visibile nella navigazione.
+  // Evidenzia nel menu la sezione in cui ci si trova.
   const links = [...document.querySelectorAll(".tabs a, .bottom-nav a")];
-  const io = new IntersectionObserver(
-    (entries) => {
-      const visible = entries.filter((e) => e.isIntersecting).sort((a, b) => b.intersectionRatio - a.intersectionRatio)[0];
-      if (!visible) return;
-      const id = `#${visible.target.id}`;
-      links.forEach((a) => a.classList.toggle("active", a.getAttribute("href") === id));
-    },
-    { threshold: [0.25, 0.6] },
+  let lockUntil = 0;
+  const setActive = (id) => links.forEach((a) => a.classList.toggle("active", a.getAttribute("href") === `#${id}`));
+
+  links.forEach((a) =>
+    a.addEventListener("click", () => {
+      setActive(a.getAttribute("href").slice(1));
+      lockUntil = Date.now() + 1000; // durante lo scorrimento animato vale la voce cliccata
+    }),
   );
-  ["panoramica", "ricarica", "clima", "salute", "posizione", "storico"].forEach((id) => $(id) && io.observe($(id)));
+
+  let ticking = false;
+  window.addEventListener("scroll", () => {
+    if (ticking) return;
+    ticking = true;
+    requestAnimationFrame(() => {
+      ticking = false;
+      if (Date.now() < lockUntil) return;
+      const offset = window.innerWidth <= 760 ? 48 : 150;
+      const sections = ["panoramica", "salute", "clima", "ricarica", "posizione", "storico"]
+        .map((id) => $(id))
+        .filter((el) => el && !el.hidden && el.offsetParent)
+        .map((el) => ({ id: el.id, top: Math.round(el.getBoundingClientRect().top) }))
+        .sort((a, b) => a.top - b.top);
+      let current = sections[0]?.id;
+      let currentTop = -Infinity;
+      for (const s of sections) {
+        // A parità di altezza (sezioni affiancate) resta la prima.
+        if (s.top <= offset && s.top > currentTop) {
+          current = s.id;
+          currentTop = s.top;
+        }
+      }
+      if (current) setActive(current);
+    });
+  }, { passive: true });
 }
 
 function showLogin() {
@@ -133,17 +158,44 @@ async function fetchSnapshot() {
     showLogin();
     throw new Error("session");
   }
-  const res = await fetch(`${FUNCTION_URL}?action=snapshot`, {
-    headers: { Authorization: `Bearer ${jwt}`, apikey: SUPABASE_ANON_KEY },
-    cache: "no-store",
-  });
+  let res;
+  try {
+    res = await fetch(`${FUNCTION_URL}?action=snapshot`, {
+      headers: { Authorization: `Bearer ${jwt}`, apikey: SUPABASE_ANON_KEY },
+      cache: "no-store",
+    });
+  } catch {
+    // Il browser blocca la risposta (CORS) oppure la funzione non esiste o non è raggiungibile.
+    throw Object.assign(new Error("network"), { code: navigator.onLine ? "UNREACHABLE" : "OFFLINE" });
+  }
   if (res.status === 401) {
     await supabase.auth.signOut();
     throw new Error("unauthorized");
   }
   const body = await res.json().catch(() => ({}));
-  if (!res.ok) throw new Error(body.error ?? `HTTP ${res.status}`);
+  if (!res.ok) throw Object.assign(new Error("api"), { code: body.error ?? `HTTP_${res.status}`, info: body, http: res.status });
   return body;
+}
+
+/** Traduce un errore in un messaggio che dice cosa controllare. */
+function explain(e) {
+  const code = String(e.code ?? "");
+  const up = e.info?.upstream;
+  if (code === "OFFLINE") return "Sei offline: i dati verranno aggiornati quando torna la connessione.";
+  if (code === "UNREACHABLE")
+    return "La funzione server non risponde al sito. Cause più probabili: funzione non pubblicata, oppure ALLOWED_ORIGINS diverso dall'indirizzo di questo sito (" + location.origin + ").";
+  if (code === "CONFIG_MISSING")
+    return `Configurazione incompleta della funzione: mancano ${(e.info?.missing ?? []).join(", ")}. Impostali con "supabase secrets set" e ripubblica.`;
+  if (code === "NOT_OWNER") return "Il tuo utente non corrisponde a OWNER_USER_ID impostato nella funzione.";
+  if (code === "HTTP_404") return "Funzione non trovata: controlla di averla pubblicata con il nome \"polestar\" e l'URL in config.js.";
+  if (e.info?.stage === "token")
+    return up === 401 || up === 400
+      ? `Polestar ha rifiutato le credenziali (${code}). Controlla POLESTAR_CLIENT_ID e POLESTAR_CLIENT_SECRET.`
+      : `Errore nel collegamento a Polestar durante l'autenticazione (${code}, ${up}).`;
+  if (up === 403 || code.startsWith("AUTHZ"))
+    return `Polestar nega l'accesso al veicolo (${code}). Controlla POLESTAR_ACCOUNT_ID e che la credenziale sia collegata all'auto.`;
+  if (code === "NO_VEHICLES") return "La credenziale non ha veicoli associati (oppure l'auto non risulta in un mercato UE/SEE).";
+  return `Errore nel recupero dei dati (${code}${up ? `, ${up}` : ""}).`;
 }
 
 async function fetchHistory() {
@@ -176,11 +228,8 @@ async function refresh(manual = false) {
     if (errs.length && !DEMO) showBanner(`Alcuni dati non sono stati aggiornati (${errs.length}). Riprova tra poco.`);
   } catch (e) {
     if (e.message !== "session" && e.message !== "unauthorized") {
-      showBanner(
-        navigator.onLine
-          ? "Non riesco a raggiungere i dati dell'auto in questo momento."
-          : "Sei offline: i dati verranno aggiornati quando torna la connessione.",
-      );
+      showBanner(explain(e));
+      setText("freshness", "Dati non aggiornati");
     }
   } finally {
     refreshing = false;

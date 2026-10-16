@@ -1,7 +1,7 @@
 // Service worker: mette in cache SOLO la struttura dell'app (HTML, CSS, JS, icone).
 // I dati del veicolo e le chiamate a Supabase non vengono mai salvati in cache.
 
-const VERSION = "v1.0.0";
+const VERSION = "v1.0.2";
 const SHELL = [
   "./",
   "./index.html",

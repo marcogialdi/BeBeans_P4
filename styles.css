@@ -90,8 +90,19 @@ small { font-size: 0.45em; color: var(--muted); font-weight: 400; letter-spacing
 }
 .topbar {
   display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 20px;
-  padding-bottom: 24px; border-bottom: 1px solid var(--line-soft);
+  position: sticky; top: 0; z-index: 900;
+  margin-top: -32px; padding: 20px 0;
 }
+/* Fondo a tutta larghezza, semitrasparente e sfocato, dietro al menu fisso. */
+.topbar::before {
+  content: ""; position: absolute; z-index: -1;
+  top: 0; bottom: 0; left: -100vmax; right: -100vmax;
+  background: rgba(11, 12, 14, 0.82);
+  -webkit-backdrop-filter: blur(16px); backdrop-filter: blur(16px);
+  border-bottom: 1px solid var(--line-soft);
+}
+html, body { overflow-x: clip; }
+html { scroll-padding-top: 112px; }
 .brand { display: flex; align-items: center; gap: 16px; }
 .car-name { display: block; font-size: 20px; font-weight: 500; }
 .tabs { display: flex; flex-wrap: wrap; gap: 6px; }
@@ -254,7 +265,9 @@ small { font-size: 0.45em; color: var(--muted); font-weight: 400; letter-spacing
 
 @media (max-width: 760px) {
   .wrap { padding: 20px 16px calc(112px + env(safe-area-inset-bottom)); gap: 16px; }
-  .topbar { display: grid; grid-template-columns: 1fr auto auto; gap: 10px 8px; padding-bottom: 4px; border-bottom: 0; }
+  html { scroll-padding-top: 16px; }
+  .topbar { position: static; margin-top: 0; padding: 0 0 4px; display: grid; grid-template-columns: 1fr auto auto; gap: 10px 8px; }
+  .topbar::before { display: none; }
   .tabs { display: none; }
   .top-actions { display: contents; }
   .brand { grid-column: 1; grid-row: 1; min-width: 0; }
