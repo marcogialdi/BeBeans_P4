@@ -952,9 +952,14 @@ async function renderLocation(loc, atLoc, locs) {
     const icon = L.divIcon({ className: "", html: `<div class="car-pin">${arrow}</div>`, iconSize: [56, 56], iconAnchor: [28, 28] });
     if (!map) {
       map = L.map("map", { zoomControl: true, attributionControl: true, scrollWheelZoom: false }).setView(pos, 15);
-      L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
-        maxZoom: 19,
-        attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>',
+      // Stile scuro CARTO "Dark Matter" (dati OpenStreetMap). Il servizio richiede di sapere da quale
+      // sito arriva la richiesta: inviamo solo l'origine (es. https://utente.github.io), mai il percorso.
+      L.tileLayer("https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png", {
+        maxZoom: 20,
+        subdomains: "abcd",
+        referrerPolicy: "strict-origin",
+        attribution:
+          '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> &copy; <a href="https://carto.com/attributions">CARTO</a>',
       }).addTo(map);
       chargeLayer = L.layerGroup().addTo(map);
       marker = L.marker(pos, { icon, keyboard: false, zIndexOffset: 1000 }).addTo(map);
